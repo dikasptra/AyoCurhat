@@ -1,0 +1,38 @@
+{
+  "entities": {
+    "Session": {
+      "title": "Chat Session",
+      "description": "A session containing multiple chat messages.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "messages": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "messages", "createdAt", "updatedAt"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User specific data and settings.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "lastPepTalk": { "type": "string", "description": "The last generated pep talk content." },
+        "lastPepTalkDate": { "type": "string", "description": "The date (YYYY-MM-DD) of the last pep talk." }
+      }
+    }
+  },
+  "firestore": {
+    "/sessions/{sessionId}": {
+      "schema": "Session",
+      "description": "Persistent chat sessions."
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles for storing metadata and pep talk history."
+    }
+  }
+}

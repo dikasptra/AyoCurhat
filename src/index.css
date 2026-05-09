@@ -1,0 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Instrument+Serif:ital@0;1&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", serif;
+  --color-sage: #77867F;
+  --color-beige: #F3EFE0;
+  --color-ivory: #FDFBF3;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  body {
+    @apply bg-ivory text-stone-800 antialiased;
+  }
+}
+
+/* Custom scrollbar for better aesthetic */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-ivory;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-beige rounded-full border-2 border-ivory;
+}
