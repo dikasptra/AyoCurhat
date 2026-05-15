@@ -1763,7 +1763,7 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
       </footer>
       </>
       ) : (
-        <main className="flex-grow flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-900">
+        <main className="flex-grow flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-900 relative chat-pattern-bg overflow-hidden">
           <div className="text-center max-w-sm bg-white dark:bg-slate-800 p-8 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-xl dark:shadow-2xl">
             <div className="w-20 h-20 bg-teal-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-teal-600/20 border border-slate-200/50 dark:border-slate-600/50">
               <CatBubbleIcon className="w-12 h-12 text-white" />
