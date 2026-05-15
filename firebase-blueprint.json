@@ -23,6 +23,19 @@
         "lastPepTalk": { "type": "string", "description": "The last generated pep talk content." },
         "lastPepTalkDate": { "type": "string", "description": "The date (YYYY-MM-DD) of the last pep talk." }
       }
+    },
+    "MoodEntry": {
+      "title": "Mood Entry",
+      "description": "A daily mood entry.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "date": { "type": "string", "description": "YYYY-MM-DD format" },
+        "mood": { "type": "string", "description": "Emoji representing mood" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "streak": { "type": "number" }
+      },
+      "required": ["userId", "date", "mood", "timestamp", "streak"]
     }
   },
   "firestore": {
@@ -33,6 +46,10 @@
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "User profiles for storing metadata and pep talk history."
+    },
+    "/mood_history/{moodEntryId}": {
+      "schema": "MoodEntry",
+      "description": "Daily mood entries."
     }
   }
 }

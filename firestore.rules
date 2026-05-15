@@ -47,12 +47,31 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.keys().hasAll(['displayName', 'email']) &&
              data.displayName is string &&
-             data.email is string;
+             data.email is string &&
+             (!('currentStreak' in data) || data.currentStreak is number) &&
+             (!('lastChatDate' in data) || data.lastChatDate is string) &&
+             (!('lastPepTalk' in data) || data.lastPepTalk is string) &&
+             (!('lastPepTalkDate' in data) || data.lastPepTalkDate is string);
     }
 
     match /users/{userId} {
       allow get: if isOwner(userId);
       allow create, update: if isOwner(userId) && isValidUser(incoming());
+    }
+    // Mood History Validation
+    function isValidMood(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.date is string &&
+             data.mood is string &&
+             data.timestamp is timestamp &&
+             data.streak is number;
+    }
+
+    match /mood_history/{moodId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidMood(incoming());
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidMood(incoming());
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
   }
 }

@@ -13,7 +13,7 @@
 
 @layer base {
   body {
-    @apply bg-ivory text-stone-800 antialiased;
+    @apply bg-ivory dark:bg-slate-900 text-stone-800 dark:text-slate-200 antialiased;
   }
 }
 
@@ -26,4 +26,17 @@
 }
 ::-webkit-scrollbar-thumb {
   @apply bg-beige rounded-full border-2 border-ivory;
+}
+
+@keyframes floatBob {
+  0%, 100% { transform: translate(-50%, 0); }
+  50% { transform: translate(-50%, -5px); }
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
 }
