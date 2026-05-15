@@ -16,9 +16,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-
-export const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
+export const signInWithGoogle = (promptSelectAccount: boolean = false) => {
+  const provider = new GoogleAuthProvider();
+  if (promptSelectAccount) {
+    provider.setCustomParameters({ prompt: 'select_account' });
+  }
+  return signInWithPopup(auth, provider);
+};
 
 export enum OperationType {
   CREATE = 'create',

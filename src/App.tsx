@@ -166,7 +166,7 @@ const TOPICS = [
 ];
 
 const CatBubbleIcon = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+  <svg viewBox="0 0 100 100" className={`animate-cat-wiggle ${className || ''}`} fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M22 35 L12 12 L35 22 Z" fill="currentColor" />
     <path d="M78 35 L88 12 L65 22 Z" fill="currentColor" />
     <path d="M24 32 L15 16 L31 24 Z" fill="rgba(0,0,0,0.3)" />
@@ -1465,7 +1465,7 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
                         <button 
                           onClick={() => {
                             setShowProfileMenu(false);
-                            signInWithGoogle(); // allows selecting another account
+                            signInWithGoogle(true); // forces selecting another account
                           }}
                           className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors"
                         >
@@ -1487,7 +1487,7 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
               </div>
             ) : (
               <button 
-                onClick={signInWithGoogle}
+                onClick={() => signInWithGoogle()}
                 className="px-5 py-2 bg-teal-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-md hover:bg-teal-700 transition-all"
               >
                 Masuk
@@ -1771,7 +1771,7 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
             <h2 className="text-2xl font-bold font-sans text-slate-800 dark:text-slate-200 mb-3">Siap Untuk Curhat?</h2>
             <p className="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed font-sans text-sm">Masuk dengan akun Google-mu untuk menyimpan riwayat curhatan dengan aman dan mulai ngobrol santai.</p>
             <button 
-              onClick={signInWithGoogle}
+              onClick={() => signInWithGoogle()}
               className="w-full py-4 bg-teal-600 text-white rounded-2xl font-bold uppercase tracking-widest shadow-md hover:bg-teal-700 dark:hover:bg-teal-700 transition-all hover:shadow-lg hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-3 text-xs"
             >
               <LogIn className="w-5 h-5" />

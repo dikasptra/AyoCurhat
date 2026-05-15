@@ -41,6 +41,23 @@
   display: none;
 }
 
+@keyframes catEarFloat {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(-5deg) scale(1.05);
+  }
+  75% {
+    transform: rotate(5deg) scale(1.05);
+  }
+}
+
+.animate-cat-wiggle {
+  animation: catEarFloat 4s ease-in-out infinite;
+  transform-origin: center;
+}
+
 /* WhatsApp-style Chat Pattern */
 .chat-pattern-bg {
   position: relative;
