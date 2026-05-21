@@ -73,5 +73,19 @@ service cloud.firestore {
       allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidMood(incoming());
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
+
+    // Feedback Validation
+    function isValidFeedback(data) {
+      return data.userId == request.auth.uid &&
+             data.text is string && data.text.size() > 0 &&
+             data.timestamp == request.time;
+    }
+
+    match /feedback/{feedbackId} {
+      // Typically, users don't need to read feedback. If they do, they can read their own.
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidFeedback(incoming());
+      // No updates or deletes allowed for feedback
+    }
   }
 }

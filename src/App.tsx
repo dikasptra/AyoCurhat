@@ -12,13 +12,15 @@ import {
   ChevronRight, ChevronLeft, User, BookOpen, Clock, Calendar, 
   LogOut, LogIn, Trash2, ChevronDown, Filter, Menu, X, Mic, Plus,
   Pencil, Check, MoreVertical, Sun, Moon, Image as ImageIcon, Flame,
-  Pin
+  Pin, Phone, Ghost, Eye, EyeOff
 } from 'lucide-react';
 import { 
   auth, db, signInWithGoogle, handleFirestoreError, OperationType 
 } from './lib/firebase';
 import { 
-  onAuthStateChanged, User as FirebaseUser, signOut 
+  onAuthStateChanged, User as FirebaseUser, signOut,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  updateProfile, sendPasswordResetEmail
 } from 'firebase/auth';
 import { 
   collection, addDoc, query, where, orderBy, onSnapshot, 
@@ -31,29 +33,56 @@ const FireAnimation = ({ onComplete }: { onComplete: () => void }) => {
     return () => clearTimeout(timer);
   }, [onComplete]);
 
+  // Limit particles to 12 to avoid lag while still giving a nice effect
+  const particles = Array.from({ length: 12 });
+
   return (
-    <div className="fixed inset-0 pointer-events-none z-[100] flex items-end justify-center overflow-hidden pb-10">
-      {[...Array(30)].map((_, i) => (
+    <div className="fixed inset-0 pointer-events-none z-[150] flex items-center justify-center overflow-hidden">
+      {/* Central Large Fire */}
+      <motion.div
+        initial={{ scale: 0, opacity: 0, y: 20 }}
+        animate={{
+          scale: [0, 1.2, 1, 1.05, 0.98, 1.02, 1, 0],
+          opacity: [0, 1, 1, 1, 1, 1, 1, 0],
+          y: [20, 0, -5, 2, -2, 1, 0, -30],
+          rotate: [0, -3, 4, -2, 3, -1, 0, 0]
+        }}
+        transition={{
+          duration: 2.8,
+          times: [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.85, 1],
+          ease: "easeInOut"
+        }}
+        className="text-[120px] md:text-[150px] relative z-10"
+        style={{
+          filter: 'drop-shadow(0 0 30px rgba(249, 115, 22, 0.7))'
+        }}
+      >
+        🔥
+      </motion.div>
+
+      {/* Floating Small Fire Bubbles */}
+      {particles.map((_, i) => (
         <motion.div
           key={i}
           initial={{ 
             opacity: 1, 
-            y: 0, 
-            x: Math.random() * innerWidth - (innerWidth/2), 
-            scale: Math.random() * 1.5 + 0.5 
+            y: "60vh", 
+            x: (Math.random() - 0.5) * (typeof window !== 'undefined' ? window.innerWidth : 600), 
+            scale: Math.random() * 0.8 + 0.4 
           }}
           animate={{ 
             opacity: 0, 
-            y: -innerHeight,
-            x: Math.random() * innerWidth - (innerWidth/2) + (Math.random() * 200 - 100),
+            y: "-40vh",
+            x: (Math.random() - 0.5) * (typeof window !== 'undefined' ? window.innerWidth : 600) + (Math.random() * 100 - 50),
             rotate: Math.random() * 360 
           }}
           transition={{ 
-            duration: Math.random() * 1.5 + 1.5, 
+            duration: Math.random() * 1.5 + 1.2, 
             ease: "easeOut",
-            delay: Math.random() * 0.2
+            delay: Math.random() * 0.3
           }}
-          className="absolute text-4xl bottom-0"
+          className="absolute text-3xl"
+          style={{ filter: 'drop-shadow(0 0 10px rgba(249, 115, 22, 0.5))' }}
         >
           🔥
         </motion.div>
@@ -199,6 +228,18 @@ const SAMBUNG_KATA_WORDS = [
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  
+  // Auth Form States
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot-password'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authDisplayName, setAuthDisplayName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [authSuccess, setAuthSuccess] = useState('');
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
   const [sambungKataState, setSambungKataState] = useState<{ active: boolean; currentWord: string | null; }>({ active: false, currentWord: null });
   const [input, setInput] = useState('');
   const [selectedTopic, setSelectedTopic] = useState('General');
@@ -214,8 +255,14 @@ export default function App() {
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isGameMenuExpanded, setIsGameMenuExpanded] = useState(false);
   const [visibleSessionsCount, setVisibleSessionsCount] = useState(15);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  const enterFocusMode = () => {
+    if (isSidebarOpen) setIsSidebarOpen(false);
+    if (showGameChips) setShowGameChips(false);
+  };
 
   const handleScrollSidebar = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
@@ -249,13 +296,65 @@ export default function App() {
   const [showGameChips, setShowGameChips] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const [moodHistory, setMoodHistory] = useState<any[]>([]);
   const [showDailyMoodModal, setShowDailyMoodModal] = useState(false);
   const [showKalenderMood, setShowKalenderMood] = useState(false);
+  const [isTemporaryMode, setIsTemporaryMode] = useState(false);
+  const [flashcardState, setFlashcardState] = useState<{
+    show: boolean;
+    dateStr: string;
+    summary: string | null;
+    isLoading: boolean;
+  }>({ show: false, dateStr: '', summary: null, isLoading: false });
+  const [showCrisisModal, setShowCrisisModal] = useState(false);
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
+
+  const generateFlashcardSummary = async (dateStr: string) => {
+    const msgs = sessions.flatMap(s => s.messages || []);
+    const userMsgsToday = msgs.filter(m => {
+      if (m.role !== 'user') return false;
+      if (!m.createdAt) return false;
+      const msgDate = new Date(m.createdAt).toLocaleDateString('en-CA');
+      return msgDate === dateStr;
+    });
+
+    if (userMsgsToday.length === 0) return;
+
+    setFlashcardState({ show: true, dateStr, summary: null, isLoading: true });
+
+    const sortedMsgs = userMsgsToday.sort((a, b) => b.text.length - a.text.length);
+    const top5Msgs = sortedMsgs.slice(0, 5).map(m => m.text);
+    
+    const prompt = `Kamu adalah asisten psikologi. Baca riwayat curhatan pengguna hari ini:\n${top5Msgs.join('\n---\n')}\nBuatkan tepat 1 paragraf (maksimal 4-5 kalimat) ringkasan tentang suasana hati dan masalah utama pengguna hari ini, serta berikan kalimat penutup yang menenangkan. Gunakan bahasa Indonesia yang santai, empatik, dan sudut pandang orang kedua (kamu).`;
+
+    try {
+      const result = await ai.models.generateContent({
+        model: "gemini-flash-lite-latest",
+        contents: prompt,
+        config: {
+          temperature: 0.65,
+        }
+      });
+
+      setFlashcardState(prev => ({
+        ...prev,
+        summary: result.text || "Tidak ada ringkasan yang bisa dihasilkan.",
+        isLoading: false
+      }));
+    } catch (error) {
+      setFlashcardState(prev => ({
+        ...prev,
+        summary: "Maaf, gagal memuat ringkasan. Cobalah beberapa saat lagi.",
+        isLoading: false
+      }));
+    }
+  };
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -332,6 +431,7 @@ export default function App() {
         setCurrentStreak(0);
         setHasChattedToday(false);
       }
+      setIsAuthChecking(false);
     });
     return () => unsubscribe();
   }, []);
@@ -440,6 +540,7 @@ export default function App() {
     const session = sessions.find(s => s.id === sessionId);
     if (session) {
       setActiveSessionId(sessionId);
+      setIsTemporaryMode(false);
       setMessages(session.messages || []);
       setIsSidebarOpen(false);
       setShowGameChips(false);
@@ -449,11 +550,28 @@ export default function App() {
 
   const startNewSession = () => {
     setActiveSessionId(null);
+    setIsTemporaryMode(false);
     setInput('');
     setSelectedImage(null);
     setIsSidebarOpen(false);
     setShowGameChips(true);
     generateInitialGreeting();
+    document.getElementById('chat-input')?.focus();
+  };
+
+  const startTemporarySession = () => {
+    setActiveSessionId('temp');
+    setIsTemporaryMode(true);
+    setInput('');
+    setSelectedImage(null);
+    setIsSidebarOpen(false);
+    setShowGameChips(true);
+    setMessages([{
+      id: Date.now().toString(),
+      role: 'model',
+      text: "Halo! Kamu sedang di Mode Sementara. Curhatan kita kali ini tidak akan disimpan ya. Ada yang ingin kamu sampaikan?",
+      createdAt: new Date().toISOString()
+    }]);
     document.getElementById('chat-input')?.focus();
   };
 
@@ -576,6 +694,74 @@ export default function App() {
     recognition.start();
   };
 
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthSuccess('');
+
+    // Pre-flight validation
+    if (authMode !== 'forgot-password' && authPassword.length < 8) {
+      setAuthError('Kata sandi minimal 8 karakter');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(authEmail)) {
+      setAuthError('Format email tidak valid');
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      if (authMode === 'register') {
+        const userCredential = await createUserWithEmailAndPassword(auth, authEmail, authPassword);
+        await updateProfile(userCredential.user, {
+          displayName: authDisplayName || 'Pelanggan Baru'
+        });
+        // user profile in firestore will be handled by onAuthStateChanged
+      } else if (authMode === 'login') {
+        await signInWithEmailAndPassword(auth, authEmail, authPassword);
+      } else if (authMode === 'forgot-password') {
+        await sendPasswordResetEmail(auth, authEmail);
+        setAuthSuccess('Link reset kata sandi telah dikirim ke email kamu.');
+      }
+    } catch (err: any) {
+      console.error("Auth error:", err);
+      // Map Firebase errors to Indonesian
+      let errMsg = 'Terjadi kesalahan. Silakan coba lagi.';
+      if (err.code === 'auth/email-already-in-use') errMsg = 'Oops, email ini sudah terdaftar.';
+      else if (err.code === 'auth/wrong-password') errMsg = 'Hmm, kata sandi salah.';
+      else if (err.code === 'auth/user-not-found') errMsg = 'Yah, email belum terdaftar.';
+      else if (err.code === 'auth/invalid-credential') errMsg = 'Email atau kata sandi salah.';
+      else if (err.code === 'auth/invalid-email') errMsg = 'Format email kayaknya keliru.';
+      setAuthError(errMsg);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackText.trim() || !user) return;
+    
+    setIsSubmittingFeedback(true);
+    try {
+      await addDoc(collection(db, 'feedback'), {
+        userId: user.uid,
+        userEmail: user.email || null,
+        userName: user.displayName || null,
+        text: feedbackText.trim(),
+        timestamp: serverTimestamp()
+      });
+      setShowFeedbackModal(false);
+      setFeedbackText('');
+      // Optionally show a success toast here
+    } catch (e) {
+      handleFirestoreError(e, OperationType.CREATE, 'feedback');
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  };
+
   const handleSendMessage = async (overrideText?: string) => {
     const textToUse = overrideText !== undefined ? overrideText : input;
     if (!textToUse.trim() && !selectedImage) return;
@@ -624,9 +810,9 @@ export default function App() {
       
       // Save Session to Firestore if needed
       let currentSessionId = activeSessionId;
-      if (user) {
+      if (user && !isTemporaryMode) {
         try {
-          if (!currentSessionId) {
+          if (!currentSessionId || currentSessionId === 'temp') {
             let title = "Curhatan Baru";
             const words = userText.split(' ').slice(0, 4);
             title = words.join(' ') + (words.length > 4 ? '...' : '');
@@ -681,7 +867,7 @@ export default function App() {
     let actualStreakForPrompt = currentStreak;
 
     // Save Session to Firestore
-    if (user) {
+    if (user && !isTemporaryMode) {
       try {
         if (!hasChattedToday) {
           const newStreak = currentStreak + 1;
@@ -697,7 +883,7 @@ export default function App() {
           actualStreakForPrompt = newStreak;
         }
 
-        if (!currentSessionId) {
+        if (!currentSessionId || currentSessionId === 'temp') {
           const docRef = await addDoc(collection(db, 'sessions'), {
             userId: user.uid,
             title,
@@ -1090,7 +1276,7 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
       setMessages(finalMessagesList);
 
       // Save Bot Message to Firestore
-      if (user && currentSessionId) {
+      if (user && currentSessionId && currentSessionId !== 'temp' && !isTemporaryMode) {
         await updateDoc(doc(db, 'sessions', currentSessionId), {
           messages: finalMessagesList,
           updatedAt: serverTimestamp()
@@ -1108,6 +1294,111 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
     <div className="flex h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans selection:bg-slate-200 selection:text-slate-800 overflow-hidden transition-colors duration-300">
       {showFireAnimation && <FireAnimation onComplete={() => setShowFireAnimation(false)} />}
       
+      {/* Crisis Hotline Modal */}
+      <AnimatePresence>
+        {showCrisisModal && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setShowCrisisModal(false)}
+                className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="w-16 h-16 bg-rose-100 dark:bg-rose-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-rose-200 dark:border-rose-900/50">
+                <Phone className="w-8 h-8 text-rose-600 dark:text-rose-400" />
+              </div>
+              
+              <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 text-slate-800 dark:text-slate-100 font-sans tracking-tight">Krisis & Bantuan Darurat</h2>
+              
+              <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 text-center mb-8 leading-relaxed">
+                Kamu tidak sendirian. Jika kamu sedang dalam masa krisis atau merasa kewalahan, segera bicarakan dengan tenaga profesional. Layanan kesehatan jiwa gratis dari Kementerian Kesehatan RI siap mendengarkanmu 24 jam.
+              </p>
+              
+              <div className="space-y-3">
+                <a 
+                  href="tel:119"
+                  className="w-full py-4 px-4 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold uppercase tracking-widest text-[11px] sm:text-xs transition-colors flex items-center justify-center shadow-lg shadow-teal-600/20 text-center"
+                >
+                  Telepon 119 ext 8
+                </a>
+                <a 
+                  href="https://www.healing119.id/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-4 px-4 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-xl font-bold uppercase tracking-widest text-[11px] sm:text-xs transition-colors flex items-center justify-center border border-slate-200 dark:border-slate-600 text-center"
+                >
+                  Chat Psikolog via Web
+                </a>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Feedback Modal */}
+      <AnimatePresence>
+        {showFeedbackModal && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setShowFeedbackModal(false)}
+                className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"
+                disabled={isSubmittingFeedback}
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <h2 className="text-xl font-bold mb-2 text-slate-800 dark:text-slate-100 font-sans tracking-tight">Kirim Masukan</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                Punya ide atau menemukan masalah? Beritahu kami agar AyoCurhat bisa jadi lebih baik lagi!
+              </p>
+              
+              <textarea
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                placeholder="Ketikan masukan Anda di sini..."
+                className="w-full p-4 mb-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl resize-none outline-none focus:ring-2 focus:ring-teal-500/50 transition-shadow h-32"
+                disabled={isSubmittingFeedback}
+              />
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowFeedbackModal(false)}
+                  className="flex-1 py-3 px-4 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-xl font-bold uppercase tracking-widest text-[11px] transition-colors"
+                  disabled={isSubmittingFeedback}
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={handleSubmitFeedback}
+                  disabled={!feedbackText.trim() || isSubmittingFeedback}
+                  className="flex-1 py-3 px-4 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold uppercase tracking-widest text-[11px] transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
+                >
+                  {isSubmittingFeedback ? (
+                    <RefreshCcw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                  Kirim
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Daily Mood Modal */}
       <AnimatePresence>
         {showDailyMoodModal && (
@@ -1200,14 +1491,24 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
                     const todayStr = new Date().toLocaleDateString('en-CA');
                     const isToday = dateStr === todayStr;
 
+                    const hasHistory = sessions.some(s => 
+                      s.messages && s.messages.some((m: any) => m.role === 'user' && m.createdAt && new Date(m.createdAt).toLocaleDateString('en-CA') === dateStr)
+                    );
+
                     days.push(
-                      <div 
+                      <button 
                         key={d} 
+                        onClick={() => {
+                          if (hasHistory) {
+                            generateFlashcardSummary(dateStr);
+                          }
+                        }}
+                        disabled={!hasHistory && !isToday} // Allow today? No, let's just disable if no history, but wait, do we disable clicking? Yes, the cursor will be default. Actually, button handles clicks. Let's just set the cursor.
                         className={`w-full aspect-square relative rounded-xl border flex flex-col items-center justify-center p-1 md:p-2 transition-all ${
                           isToday 
                             ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 shadow-sm' 
                             : 'border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
+                        } ${hasHistory ? 'cursor-pointer hover:border-teal-300 dark:hover:border-teal-700 hover:shadow-md' : (isToday ? 'cursor-default' : 'cursor-default opacity-70')}`}
                       >
                         <span className={`text-xs ${isToday ? 'font-black text-teal-700 dark:text-teal-400' : 'font-medium text-slate-400 dark:text-slate-500'}`}>
                           {d}
@@ -1222,11 +1523,63 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
                             🔥
                           </div>
                         )}
-                      </div>
+                      </button>
                     );
                   }
                   return days;
                 })()}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Flashcard Summary Modal */}
+      <AnimatePresence>
+        {flashcardState.show && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+            <motion.div 
+              initial={{ opacity: 0, y: 20, rotateX: -10 }}
+              animate={{ opacity: 1, y: 0, rotateX: 0 }}
+              exit={{ opacity: 0, y: 20, rotateX: 10 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-200 dark:border-slate-700 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-teal-400 to-sage" />
+              <button 
+                onClick={() => setFlashcardState(prev => ({...prev, show: false}))}
+                className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="flex items-center gap-3 mb-6 mt-2">
+                <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center text-teal-600 dark:text-teal-400">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-200 tracking-tight">Ringkasan Harian</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-widest font-bold">
+                    {new Date(flashcardState.dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="min-h-[140px] flex items-center justify-center relative">
+                {flashcardState.isLoading ? (
+                  <div className="flex flex-col items-center gap-3 text-teal-600">
+                    <RefreshCcw className="w-8 h-8 animate-spin opacity-50" />
+                    <span className="text-sm font-medium animate-pulse">Menulis ringkasan...</span>
+                  </div>
+                ) : (
+                  <motion.div 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    className="text-slate-700 dark:text-slate-300 leading-relaxed font-sans text-sm text-justify w-full"
+                  >
+                    <ReactMarkdown>{flashcardState.summary || ""}</ReactMarkdown>
+                  </motion.div>
+                )}
               </div>
             </motion.div>
           </div>
@@ -1298,15 +1651,24 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
                   onClick={() => {
                     startNewSession();
                   }} 
-                  className="w-full py-2.5 px-4 bg-teal-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-teal-700 transition-colors shadow-sm"
+                  className="w-full py-2 px-3 bg-teal-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-teal-700 transition-colors shadow-sm"
                  >
                     <Plus className="w-4 h-4" />
                     Curhat Baru
                  </button>
                  <button 
+                  onClick={() => {
+                    startTemporarySession();
+                  }} 
+                  className="w-full mt-2 py-2 px-3 bg-transparent text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                 >
+                    <Ghost className="w-4 h-4" />
+                    Mode Sementara
+                 </button>
+                 <button 
                   id="btn-kalender-mood"
                   onClick={() => setShowKalenderMood(true)} 
-                  className="w-full mt-2 md:mt-3 py-2.5 px-4 bg-sage/10 text-teal-700 dark:text-teal-400 border border-teal-600/20 rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-teal-600/10 transition-colors shadow-sm"
+                  className="w-full mt-2 py-2 px-3 bg-sage/10 text-teal-700 dark:text-teal-400 border border-teal-600/20 rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-teal-600/10 transition-colors shadow-sm"
                  >
                     <Calendar className="w-4 h-4" />
                     Kalender Mood
@@ -1316,38 +1678,62 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
               <div className="flex-1 overflow-y-auto px-3 py-2 space-y-4 md:space-y-6" onScroll={handleScrollSidebar}>
                  {/* Game Menu */}
                  <div>
-                   <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest px-2 mb-2">🎮 Main Game</h3>
-                   <div className="grid grid-cols-2 gap-1.5">
-                     {[
-                       { name: 'Tebak Emoji', icon: '🎭' },
-                       { name: 'Sambung Kata', icon: '🔗' },
-                       { name: 'Tebak Siapa', icon: '🕵️' },
-                       { name: 'Tebak Benda', icon: '📦' }
-                     ].map(game => (
-                       <button
-                         key={game.name}
-                         onClick={() => {
-                           if (isMobile) setIsSidebarOpen(false);
-                           handleSendMessage(`Ayo main ${game.name}. (Seed: ${Math.random()})`);
-                         }}
-                         className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-50 dark:bg-slate-800/50 hover:bg-teal-50 dark:hover:bg-teal-900/20 border border-slate-100 dark:border-slate-800 rounded-xl transition-colors shrink-0 text-center"
+                   <button 
+                     onClick={() => setIsGameMenuExpanded(!isGameMenuExpanded)}
+                     className="w-full flex items-center justify-between px-2 mb-2 text-slate-400 dark:text-slate-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors group"
+                   >
+                     <h3 className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+                       🎮 Main Game
+                     </h3>
+                     {isGameMenuExpanded ? (
+                       <ChevronDown className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
+                     ) : (
+                       <ChevronRight className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
+                     )}
+                   </button>
+                   <AnimatePresence>
+                     {isGameMenuExpanded && (
+                       <motion.div 
+                         initial={{ height: 0, opacity: 0 }}
+                         animate={{ height: "auto", opacity: 1 }}
+                         exit={{ height: 0, opacity: 0 }}
+                         transition={{ duration: 0.2 }}
+                         className="overflow-hidden"
                        >
-                         <span className="text-xl leading-none">{game.icon}</span>
-                         <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 leading-tight">{game.name}</span>
-                       </button>
-                     ))}
-                   </div>
+                         <div className="grid grid-cols-2 gap-1.5 pt-1">
+                           {[
+                             { name: 'Tebak Emoji', icon: '🎭' },
+                             { name: 'Sambung Kata', icon: '🔗' },
+                             { name: 'Tebak Siapa', icon: '🕵️' },
+                             { name: 'Tebak Benda', icon: '📦' }
+                           ].map(game => (
+                             <button
+                               key={game.name}
+                               onClick={() => {
+                                 if (isMobile) setIsSidebarOpen(false);
+                                 handleSendMessage(`Ayo main ${game.name}. (Seed: ${Math.random()})`);
+                               }}
+                               className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-50 dark:bg-slate-800/50 hover:bg-teal-50 dark:hover:bg-teal-900/20 border border-slate-100 dark:border-slate-800 rounded-xl transition-colors shrink-0 text-center"
+                             >
+                               <span className="text-xl leading-none">{game.icon}</span>
+                               <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 leading-tight">{game.name}</span>
+                             </button>
+                           ))}
+                         </div>
+                       </motion.div>
+                     )}
+                   </AnimatePresence>
                  </div>
 
                  {/* History Sessions */}
                  <div>
                    <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest px-2 mb-2">Riwayat Curhat</h3>
-                   <div className="space-y-1">
+                   <div className="space-y-0.5">
                      {sessions.slice(0, visibleSessionsCount).map((s) => (
                        <div 
                          key={s.id} 
                      onClick={() => selectSession(s.id)}
-                     className={`p-3 rounded-xl cursor-pointer transition-colors border group relative ${activeSessionId === s.id ? 'bg-slate-200/50 dark:bg-slate-800 border-slate-200 dark:border-slate-700' : 'border-transparent hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-200/30 dark:hover:bg-slate-800/50'}`}
+                     className={`px-3 py-2 rounded-xl cursor-pointer transition-colors border group relative ${activeDropdown === s.id ? 'z-50' : 'z-0'} ${activeSessionId === s.id ? 'bg-slate-200/50 dark:bg-slate-800 border-slate-200 dark:border-slate-700' : 'border-transparent hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-200/30 dark:hover:bg-slate-800/50'}`}
                    >
                      {editingSessionId === s.id ? (
                        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
@@ -1355,7 +1741,7 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
                            type="text" 
                            value={editTitle}
                            onChange={e => setEditTitle(e.target.value)}
-                           className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-sm outline-none focus:border-sage dark:text-slate-200"
+                           className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-[13px] outline-none focus:border-sage dark:text-slate-200"
                            autoFocus
                            onKeyDown={e => e.key === 'Enter' && updateSessionTitle(s.id)}
                          />
@@ -1364,20 +1750,17 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
                          </button>
                        </div>
                      ) : (
-                       <div className="pr-6">
-                         <div className="flex items-center gap-1.5">
-                           {s.isPinned && <Pin className="w-3.5 h-3.5 text-teal-600 dark:text-teal-500 fill-teal-600/20 dark:fill-teal-500/20 shrink-0" />}
-                           <p className="text-sm font-bold text-stone-700 dark:text-slate-300 line-clamp-1">{s.title || "Curhatan"}</p>
-                         </div>
-                         <span className="text-[9px] text-stone-400 dark:text-slate-500 font-bold uppercase tracking-widest mt-1 block transition-colors">
-                           {s.updatedAt?.toDate ? s.updatedAt.toDate().toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : 'Hari ini'}
-                         </span>
-                       </div>
+                       <div className="pr-6 w-full overflow-hidden">
+                          <div className="flex items-center gap-1.5 w-full">
+                            {s.isPinned && <Pin className="w-3 h-3 text-teal-600 dark:text-teal-500 fill-teal-600/20 dark:fill-teal-500/20 shrink-0" />}
+                            <p className="text-[13px] font-bold text-stone-700 dark:text-slate-300 truncate w-full">{s.title || "Curhatan"}</p>
+                          </div>
+                        </div>
                      )}
                      
                      {/* Actions */}
                      {editingSessionId !== s.id && (
-                       <div className="absolute right-3 top-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                       <div className={`absolute right-2 top-1/2 -translate-y-1/2 transition-opacity ${activeDropdown === s.id ? "opacity-100 z-50" : "opacity-100 md:opacity-0 md:group-hover:opacity-100"}`} onClick={e => e.stopPropagation()}>
                          <button 
                            aria-label="Opsi Obrolan"
                            onClick={(e) => { 
@@ -1459,14 +1842,14 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
              </div>
            </div>
 
-           {/* Theme Toggle */}
-              <div className="p-4 flex-shrink-0 border-t border-beige/50 dark:border-slate-800">
+           {/* Crisis Hotline Button */}
+              <div className="p-4 flex-shrink-0 border-t border-slate-200/50 dark:border-slate-800 mt-auto">
                  <button 
-                  onClick={() => setIsDarkMode(!isDarkMode)} 
-                  className="w-full p-3 rounded-xl flex items-center justify-center gap-3 text-[10px] font-bold uppercase tracking-widest text-stone-500 dark:text-slate-400 hover:bg-beige/30 dark:hover:bg-slate-800/50 hover:text-sage dark:hover:text-sage transition-colors border border-transparent"
+                  onClick={() => setShowCrisisModal(true)} 
+                  className="w-full p-3 rounded-xl flex items-center justify-center gap-3 text-[11px] font-bold uppercase tracking-widest bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 hover:opacity-80 transition-opacity border border-transparent shadow-sm"
                  >
-                    {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                    Mode {isDarkMode ? 'Terang' : 'Gelap'}
+                    <Phone className="w-4 h-4" />
+                    Bantuan Darurat
                  </button>
               </div>
             </motion.div>
@@ -1549,6 +1932,18 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
                       className="absolute right-0 top-12 mt-2 w-48 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50 origin-top-right"
                     >
                       <div className="p-2">
+                        <div className="border-b border-slate-100 dark:border-slate-700 pb-1 mb-1">
+                          <button 
+                            onClick={() => {
+                              setIsDarkMode(!isDarkMode);
+                              setShowProfileMenu(false);
+                            }}
+                            className="w-full flex items-center justify-between px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors"
+                          >
+                            <span>Mode {isDarkMode ? 'Terang' : 'Gelap'}</span>
+                            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                          </button>
+                        </div>
                         <button 
                           onClick={() => {
                             setShowProfileMenu(false);
@@ -1557,6 +1952,15 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
                           className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors"
                         >
                           Ganti Akun
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setShowProfileMenu(false);
+                            setShowFeedbackModal(true);
+                          }}
+                          className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors"
+                        >
+                          Beri Masukan (Feedback)
                         </button>
                         <button 
                           onClick={() => {
@@ -1587,8 +1991,21 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
       {/* Chat Area & Auth Guard */}
       {user ? (
         <>
+          {isTemporaryMode && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              className="bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 py-1.5 px-4 z-20 flex justify-center items-center"
+            >
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 tracking-wide">
+                <Ghost className="w-3.5 h-3.5 opacity-70" />
+                Mode Sementara Aktif: Obrolan ini tidak akan disimpan di riwayatmu.
+              </p>
+            </motion.div>
+          )}
           <main 
             className="flex-grow overflow-y-auto relative transition-colors duration-300 dark:bg-slate-800 chat-pattern-bg"
+            onScroll={enterFocusMode}
         style={{ 
           backgroundColor: isDarkMode ? '#1e293b' : '#F3EFE0'
         }}
@@ -1783,10 +2200,11 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
               </div>
             )}
             <div className="flex items-end gap-2">
-              <textarea
+             <textarea
                 id="chat-input"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onFocus={enterFocusMode}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -1849,21 +2267,155 @@ Pelan-pelan aja. Kalau udah agak mendingan, ceritain pelan-pelan ke gue apa yang
         </div>
       </footer>
       </>
-      ) : (
+      ) : isAuthChecking ? (
         <main className="flex-grow flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-900 relative chat-pattern-bg overflow-hidden">
-          <div className="text-center max-w-sm bg-white dark:bg-slate-800 p-8 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-xl dark:shadow-2xl">
-            <div className="w-20 h-20 bg-teal-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-teal-600/20 border border-slate-200/50 dark:border-slate-600/50">
-              <CatBubbleIcon className="w-12 h-12 text-white" />
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center animate-pulse">
+              <CatBubbleIcon className="w-6 h-6 text-slate-400 dark:text-slate-500" />
             </div>
-            <h2 className="text-2xl font-bold font-sans text-slate-800 dark:text-slate-200 mb-3">Siap Untuk Curhat?</h2>
-            <p className="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed font-sans text-sm">Masuk dengan akun Google-mu untuk menyimpan riwayat curhatan dengan aman dan mulai ngobrol santai.</p>
-            <button 
-              onClick={() => signInWithGoogle()}
-              className="w-full py-4 bg-teal-600 text-white rounded-2xl font-bold uppercase tracking-widest shadow-md hover:bg-teal-700 dark:hover:bg-teal-700 transition-all hover:shadow-lg hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-3 text-xs"
-            >
-              <LogIn className="w-5 h-5" />
-              Masuk Sekarang
-            </button>
+          </div>
+        </main>
+      ) : (
+        <main className="flex-grow flex items-center justify-center p-4 sm:p-8 bg-slate-50 dark:bg-slate-900 relative chat-pattern-bg overflow-hidden">
+          <div className="w-full max-w-sm bg-white dark:bg-slate-800 p-8 sm:p-10 rounded-3xl border border-slate-200/60 dark:border-slate-700/60 shadow-xl dark:shadow-2xl z-10 relative">
+            <div className="flex flex-col items-center mb-8">
+              <div className="w-14 h-14 bg-teal-50 dark:bg-teal-900/30 rounded-2xl flex items-center justify-center mb-5 ring-1 ring-teal-100 dark:ring-teal-900/50">
+                <CatBubbleIcon className="w-8 h-8 text-teal-600 dark:text-teal-400" />
+              </div>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white mb-2">
+                {authMode === 'login' ? 'Selamat Datang' : authMode === 'register' ? 'Buat Akun' : 'Reset Sandi'}
+              </h2>
+              <p className="text-slate-500 dark:text-slate-400 text-sm text-center">
+                {authMode === 'login' ? 'Masuk untuk melanjutkan curhatmu.' : authMode === 'register' ? 'Daftar agar riwayatmu tersimpan aman.' : 'Masukkan emailmu untuk mengatur ulang sandi.'}
+              </p>
+            </div>
+
+            {(authError || authSuccess) && (
+              <div className={`p-3 mb-6 rounded-lg text-sm font-medium border ${authError ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-900/20 dark:border-rose-800/50 dark:text-rose-400' : 'bg-teal-50 border-teal-200 text-teal-700 dark:bg-teal-900/20 dark:border-teal-800/50 dark:text-teal-400'}`}>
+                {authError || authSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              {authMode === 'register' && (
+                <div>
+                  <input 
+                    type="text"
+                    required
+                    value={authDisplayName}
+                    onChange={e => setAuthDisplayName(e.target.value)}
+                    className="w-full bg-transparent border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all dark:text-white dark:focus:border-teal-400 dark:focus:ring-teal-400 placeholder:text-slate-400"
+                    placeholder="Nama Panggilan"
+                  />
+                </div>
+              )}
+
+              <div>
+                <input 
+                  type="email"
+                  required
+                  value={authEmail}
+                  onChange={e => setAuthEmail(e.target.value)}
+                  className={`w-full bg-transparent border ${authEmail && !authEmail.includes('@') ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-300 dark:border-slate-700 focus:border-teal-500 focus:ring-teal-500 dark:focus:border-teal-400 dark:focus:ring-teal-400'} rounded-xl px-4 py-3 text-sm outline-none focus:ring-1 transition-all dark:text-white placeholder:text-slate-400`}
+                  placeholder="Email"
+                />
+              </div>
+
+              {authMode !== 'forgot-password' && (
+                <div>
+                  <div className="relative">
+                    <input 
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={authPassword}
+                      onChange={e => setAuthPassword(e.target.value)}
+                      className={`w-full bg-transparent border ${authPassword && authPassword.length < 8 ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500' : 'border-slate-300 dark:border-slate-700 focus:border-teal-500 focus:ring-teal-500 dark:focus:border-teal-400 dark:focus:ring-teal-400'} rounded-xl pl-4 pr-10 py-3 text-sm outline-none focus:ring-1 transition-all dark:text-white placeholder:text-slate-400`}
+                      placeholder="Kata Sandi (Min. 8 karakter)"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {authMode === 'login' && (
+                <div className="flex justify-end pt-1">
+                  <button 
+                    type="button" 
+                    onClick={() => { setAuthMode('forgot-password'); setAuthError(''); setAuthSuccess(''); }}
+                    className="text-xs text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 font-medium transition-colors"
+                  >
+                    Lupa sandi?
+                  </button>
+                </div>
+              )}
+
+              <button 
+                type="submit"
+                disabled={authLoading || !authEmail.includes('@') || (authMode !== 'forgot-password' && authPassword.length < 8) || (authMode === 'register' && !authDisplayName.trim())}
+                className="w-full mt-2 py-3 bg-teal-600 text-white rounded-xl font-medium text-sm shadow-sm hover:bg-teal-700 transition-all active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none flex items-center justify-center gap-2"
+              >
+                {authLoading ? (
+                  <RefreshCcw className="w-4 h-4 animate-spin" />
+                ) : (
+                  authMode === 'login' ? 'Masuk' : authMode === 'register' ? 'Daftar' : 'Kirim Link'
+                )}
+              </button>
+            </form>
+
+            <div className="mt-6 text-center">
+              {authMode === 'login' ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Belum punya akun?{' '}
+                  <button onClick={() => { setAuthMode('register'); setAuthError(''); setAuthSuccess(''); }} className="text-teal-600 dark:text-teal-400 font-semibold hover:underline">
+                    Daftar di sini
+                  </button>
+                </p>
+              ) : authMode === 'register' ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Sudah punya akun?{' '}
+                  <button onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess(''); }} className="text-teal-600 dark:text-teal-400 font-semibold hover:underline">
+                    Masuk
+                  </button>
+                </p>
+              ) : (
+                <button
+                  onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess(''); }}
+                  className="flex items-center justify-center w-full gap-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-xs font-medium transition-colors"
+                >
+                  <ChevronLeft className="w-3 h-3" /> Kembali ke Masuk
+                </button>
+              )}
+            </div>
+
+            {authMode !== 'forgot-password' && (
+              <>
+                <div className="flex items-center gap-3 my-6">
+                  <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1" />
+                  <span className="text-xs text-slate-400 font-medium px-1">Atau</span>
+                  <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1" />
+                </div>
+                
+                <button 
+                  onClick={() => signInWithGoogle()}
+                  type="button"
+                  className="w-full py-3 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-xl font-medium text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                  </svg>
+                  Lanjutkan dengan Google
+                </button>
+              </>
+            )}
           </div>
         </main>
       )}

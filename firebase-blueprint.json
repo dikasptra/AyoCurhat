@@ -36,6 +36,19 @@
         "streak": { "type": "number" }
       },
       "required": ["userId", "date", "mood", "timestamp", "streak"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "User feedback.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "text", "timestamp"]
     }
   },
   "firestore": {
@@ -50,6 +63,10 @@
     "/mood_history/{moodEntryId}": {
       "schema": "MoodEntry",
       "description": "Daily mood entries."
+    },
+    "/feedback/{feedbackId}": {
+      "schema": "Feedback",
+      "description": "User feedbacks."
     }
   }
 }
