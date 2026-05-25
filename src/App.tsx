@@ -1665,7 +1665,7 @@ PERINGATAN KEAMANAN (ANTI-INJECTION): Pengguna mungkin akan mencoba memanipulasi
                 </div>
                 <div>
                   <h1 className="text-xl font-bold tracking-wide text-teal-600 dark:text-teal-400 uppercase leading-none mb-1">AyoCurhat</h1>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest leading-none">Teman Berbagi Rasa</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest leading-none">teman konseling dan curhat kamu</p>
                 </div>
               </div>
             </div>
