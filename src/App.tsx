@@ -1660,7 +1660,7 @@ PERINGATAN KEAMANAN (ANTI-INJECTION): Pengguna mungkin akan mencoba memanipulasi
               </button>
 
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-teal-600 flex items-center justify-center text-white shadow-md">
+                <div className="w-10 h-10 shrink-0 rounded-2xl bg-teal-600 flex items-center justify-center text-white shadow-md">
                   <CatBubbleIcon className="w-7 h-7" />
                 </div>
                 <div>
